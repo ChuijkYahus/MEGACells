@@ -11,15 +11,13 @@ import net.minecraft.data.PackOutput;
 import net.minecraft.data.tags.IntrinsicHolderTagsProvider;
 import net.minecraft.data.tags.ItemTagsProvider;
 import net.minecraft.data.tags.TagsProvider;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.tags.TagKey;
-import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
 import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.common.data.ExistingFileHelper;
 
 import appeng.api.features.P2PTunnelAttunement;
-import appeng.datagen.providers.tags.ConventionTags;
 
 import gripe._90.megacells.MEGACells;
 import gripe._90.megacells.definition.MEGABlocks;
@@ -27,8 +25,8 @@ import gripe._90.megacells.definition.MEGAItems;
 import gripe._90.megacells.definition.MEGATags;
 
 public class MEGATagProvider {
-    public static class Block extends IntrinsicHolderTagsProvider<net.minecraft.world.level.block.Block> {
-        public Block(
+    public static class Blocks extends IntrinsicHolderTagsProvider<Block> {
+        public Blocks(
                 PackOutput output, CompletableFuture<HolderLookup.Provider> registries, ExistingFileHelper existing) {
             super(
                     output,
@@ -62,8 +60,8 @@ public class MEGATagProvider {
         }
     }
 
-    public static class Item extends ItemTagsProvider {
-        public Item(
+    public static class Items extends ItemTagsProvider {
+        public Items(
                 PackOutput output,
                 CompletableFuture<HolderLookup.Provider> registries,
                 CompletableFuture<TagsProvider.TagLookup<net.minecraft.world.level.block.Block>> blockTags,
@@ -88,27 +86,6 @@ public class MEGATagProvider {
             tag(MEGATags.MEGA_PATTERN_PROVIDER)
                     .add(MEGABlocks.MEGA_PATTERN_PROVIDER.asItem(), MEGAItems.MEGA_PATTERN_PROVIDER.asItem());
 
-            tag(MEGATags.COMPRESSION_OVERRIDES)
-                    .add(Items.QUARTZ)
-                    .add(Items.GLOWSTONE_DUST)
-                    .add(Items.AMETHYST_SHARD)
-                    .add(Items.MAGMA_CREAM)
-                    .add(Items.CLAY_BALL)
-                    .add(Items.MELON_SLICE)
-                    .add(Items.ICE, Items.PACKED_ICE)
-                    .add(Items.STRING)
-                    .add(Items.SNOWBALL)
-                    .add(Items.HONEYCOMB)
-                    .add(Items.POINTED_DRIPSTONE)
-                    .addOptionalTag(
-                            ResourceLocation.fromNamespaceAndPath("functionalstorage", "ignore_crafting_check"));
-
-            tag(MEGATags.COMPRESSION_BLACKLIST)
-                    .addTag(Tags.Items.SEEDS)
-                    .addTag(ConventionTags.WRENCH)
-                    .addOptionalTag(ResourceLocation.fromNamespaceAndPath("mysticalagriculture", "essences"))
-                    .remove(ResourceLocation.fromNamespaceAndPath("mysticalagriculture", "inferium_essence"));
-
             tag(Tags.Items.INGOTS)
                     .addTag(MEGATags.SKY_STEEL_INGOT)
                     .addTag(MEGATags.SKY_BRONZE_INGOT)
@@ -116,7 +93,7 @@ public class MEGATagProvider {
             copy(Tags.Blocks.STORAGE_BLOCKS, Tags.Items.STORAGE_BLOCKS);
         }
 
-        private void copy(TagKey<net.minecraft.world.level.block.Block> blockTag) {
+        private void copy(TagKey<Block> blockTag) {
             copy(blockTag, TagKey.create(Registries.ITEM, blockTag.location()));
         }
 

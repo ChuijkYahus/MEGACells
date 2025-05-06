@@ -39,6 +39,7 @@ import appeng.recipes.transform.TransformRecipeBuilder;
 import gripe._90.megacells.MEGACells;
 import gripe._90.megacells.datagen.integration.AppBotIntegrationData;
 import gripe._90.megacells.datagen.integration.AppMekIntegrationData;
+import gripe._90.megacells.datagen.integration.AppliedEIntegrationData;
 import gripe._90.megacells.datagen.integration.ArsEngIntegrationData;
 import gripe._90.megacells.definition.MEGABlocks;
 import gripe._90.megacells.definition.MEGAItems;
@@ -336,6 +337,14 @@ public class MEGARecipeProvider extends RecipeProvider {
                 .requires(MEGAItems.MEGA_PATTERN_PROVIDER)
                 .unlockedBy("has_cable_mega_pattern_provider", has(MEGAItems.MEGA_PATTERN_PROVIDER))
                 .save(output, MEGACells.makeId("network/mega_pattern_provider_block"));
+        ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, MEGAItems.MEGA_EMC_INTERFACE)
+                .requires(MEGABlocks.MEGA_EMC_INTERFACE)
+                .unlockedBy("has_mega_emc_interface", has(MEGABlocks.MEGA_EMC_INTERFACE))
+                .save(output, MEGACells.makeId("network/mega_emc_interface_part"));
+        ShapelessRecipeBuilder.shapeless(RecipeCategory.MISC, MEGABlocks.MEGA_EMC_INTERFACE)
+                .requires(MEGAItems.MEGA_EMC_INTERFACE)
+                .unlockedBy("has_mega_emc_interface", has(MEGABlocks.MEGA_EMC_INTERFACE))
+                .save(output, MEGACells.makeId("network/mega_emc_interface_block"));
 
         ShapedRecipeBuilder.shaped(RecipeCategory.MISC, MEGAItems.CELL_DOCK)
                 .pattern("ICI")
@@ -365,6 +374,10 @@ public class MEGARecipeProvider extends RecipeProvider {
 
         if (Addons.ARSENG.isLoaded()) {
             ArsEngIntegrationData.recipes(output);
+        }
+
+        if (Addons.APPLIEDE.isLoaded()) {
+            AppliedEIntegrationData.recipes(output);
         }
     }
 
@@ -473,7 +486,7 @@ public class MEGARecipeProvider extends RecipeProvider {
                 null);
     }
 
-    public static RecipeOutput conditional(RecipeOutput output, Addons addon) {
+    private static RecipeOutput conditional(RecipeOutput output, Addons addon) {
         return output.withConditions(new ModLoadedCondition(addon.getModId()));
     }
 }

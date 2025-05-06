@@ -18,6 +18,7 @@ import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.village.VillagerTradesEvent;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 
 import appeng.api.AECapabilities;
 import appeng.api.features.HotkeyAction;
@@ -37,12 +38,14 @@ import gripe._90.megacells.definition.MEGABlocks;
 import gripe._90.megacells.definition.MEGAComponents;
 import gripe._90.megacells.definition.MEGAConfig;
 import gripe._90.megacells.definition.MEGACreativeTab;
+import gripe._90.megacells.definition.MEGADataMaps;
 import gripe._90.megacells.definition.MEGAItems;
 import gripe._90.megacells.definition.MEGAMenus;
 import gripe._90.megacells.integration.Addons;
 import gripe._90.megacells.integration.appmek.RadioactiveCellItem;
 import gripe._90.megacells.item.cell.BulkCellItem;
 import gripe._90.megacells.misc.CompressionService;
+import gripe._90.megacells.misc.SyncCompressionChainsPacket;
 
 @Mod(MEGACells.MODID)
 public class MEGACells {
@@ -55,10 +58,12 @@ public class MEGACells {
         MEGAMenus.DR.register(eventBus);
         MEGAComponents.DR.register(eventBus);
         MEGACreativeTab.DR.register(eventBus);
+        eventBus.addListener(MEGADataMaps::register);
 
         eventBus.addListener(MEGACells::initUpgrades);
         eventBus.addListener(MEGACells::initStorageCells);
         eventBus.addListener(MEGACells::initCapabilities);
+        eventBus.addListener(MEGACells::initPacketHandlers);
 
         CompressionService.init();
         NeoForge.EVENT_BUS.addListener(MEGACells::initVillagerTrades);
@@ -132,7 +137,7 @@ public class MEGACells {
 
     private static void initStorageCells(FMLCommonSetupEvent event) {
         event.enqueueWork(() -> {
-            StorageCells.addCellHandler(BulkCellItem.HANDLER);
+            BulkCellItem.registerHandler();
 
             for (var cell : MEGAItems.getTieredCells()) {
                 if (cell.item().asItem() instanceof AbstractPortableCell portable) {
@@ -193,5 +198,13 @@ public class MEGACells {
                         cell.item());
             }
         }
+    }
+
+    private static void initPacketHandlers(RegisterPayloadHandlersEvent event) {
+        var registrar = event.registrar("1");
+        registrar.playToClient(
+                SyncCompressionChainsPacket.TYPE,
+                SyncCompressionChainsPacket.STREAM_CODEC,
+                CompressionService::syncToClient);
     }
 }

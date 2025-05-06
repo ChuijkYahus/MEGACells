@@ -9,12 +9,13 @@ import com.hollingsworth.arsnouveau.setup.registry.ItemsRegistry;
 import net.minecraft.data.recipes.RecipeOutput;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.ItemLike;
+import net.neoforged.neoforge.common.conditions.ModLoadedCondition;
 
 import appeng.core.definitions.ItemDefinition;
 
 import gripe._90.arseng.definition.ArsEngItems;
 import gripe._90.arseng.item.SourceCellItem;
-import gripe._90.megacells.datagen.MEGARecipeProvider;
+import gripe._90.megacells.MEGACells;
 import gripe._90.megacells.definition.MEGAItems;
 import gripe._90.megacells.integration.Addons;
 
@@ -26,9 +27,10 @@ public class ArsEngIntegrationData {
     }
 
     public static void recipes(RecipeOutput output) {
-        MEGARecipeProvider.conditional(output, Addons.ARSENG)
+        output.withConditions(new ModLoadedCondition(Addons.ARSENG.getModId()))
                 .accept(
-                        MEGAItems.MEGA_SOURCE_CELL_HOUSING.id(),
+                        MEGACells.makeId("cells/"
+                                + MEGAItems.MEGA_SOURCE_CELL_HOUSING.id().getPath()),
                         new EnchantingApparatusRecipe(
                                 Ingredient.of(ArsEngItems.SOURCE_CELL_HOUSING),
                                 MEGAItems.MEGA_SOURCE_CELL_HOUSING.stack(),

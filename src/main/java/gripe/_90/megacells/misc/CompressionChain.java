@@ -1,61 +1,227 @@
 package gripe._90.megacells.misc;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
+import org.jetbrains.annotations.NotNull;
+
+import it.unimi.dsi.fastutil.Pair;
+import it.unimi.dsi.fastutil.objects.Object2LongLinkedOpenHashMap;
 import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.world.item.Item;
+import net.neoforged.neoforge.common.util.Lazy;
 
-import appeng.api.stacks.AEItemKey;
+import appeng.api.crafting.IPatternDetails;
 
-public class CompressionChain extends ObjectArrayList<CompressionChain.Variant> {
-    void add(AEItemKey item, int factor) {
-        add(new Variant(item, factor));
+public class CompressionChain {
+    public static final StreamCodec<RegistryFriendlyByteBuf, CompressionChain> STREAM_CODEC =
+            Variant.STREAM_CODEC.apply(ByteBufCodecs.list()).map(CompressionChain::new, chain -> chain.variants);
+
+    public static final long STACK_LIMIT = (long) Math.pow(2, 42);
+
+    private final List<Variant> variants;
+    private final Lazy<List<Pair<IPatternDetails, IPatternDetails>>> patterns = Lazy.of(this::gatherPatterns);
+
+    CompressionChain(List<Variant> variants) {
+        this.variants = Collections.unmodifiableList(variants);
     }
 
-    public boolean containsVariant(AEItemKey item) {
-        return stream().anyMatch(v -> v.item().equals(item));
+    public static long clamp(BigInteger toClamp, long limit) {
+        return toClamp.min(BigInteger.valueOf(limit)).longValue();
     }
 
-    public BigInteger unitFactor(AEItemKey item) {
-        return stream()
-                .filter(v -> v.item().equals(item))
-                .findFirst()
-                .map(i -> IntStream.rangeClosed(0, indexOf(i))
-                        .mapToObj(this::get)
-                        .map(v -> BigInteger.valueOf(v.factor()))
-                        .reduce(BigInteger.ONE, BigInteger::multiply))
-                .orElse(BigInteger.ONE);
+    public boolean isEmpty() {
+        return variants.isEmpty();
     }
 
-    public CompressionChain lastMultiplierSwapped() {
-        var multipliers = stream().map(Variant::factor).collect(Collectors.toList());
-        Collections.rotate(multipliers, -1);
-
-        var items = stream().map(Variant::item).toList();
-        var chain = new CompressionChain();
-
-        for (var i = 0; i < items.size(); i++) {
-            chain.add(items.get(i), multipliers.get(i));
+    public boolean containsVariant(Item item) {
+        for (var variant : variants) {
+            if (variant.item.equals(item)) {
+                return true;
+            }
         }
 
-        return chain;
+        return false;
     }
 
-    public CompressionChain limited(int limit) {
-        var chain = new CompressionChain();
-        chain.addAll(subList(0, limit));
-        return chain;
+    public Item getItem(int index) {
+        return variants.get(index).item;
     }
 
-    public record Variant(AEItemKey item, int factor) {
-        Variant(Item item, int factor) {
-            this(AEItemKey.of(item), factor);
+    public BigInteger unitFactor(Item item) {
+        if (item == null) {
+            return BigInteger.ONE;
         }
 
+        var potentialFactor = BigInteger.ONE;
+
+        for (var variant : variants) {
+            potentialFactor = potentialFactor.multiply(variant.big());
+
+            if (variant.item.equals(item)) {
+                return potentialFactor;
+            }
+        }
+
+        return BigInteger.ONE;
+    }
+
+    public int size() {
+        return variants.size();
+    }
+
+    public List<IPatternDetails> getDecompressionPatterns(int cutoff) {
+        if (isEmpty()) {
+            return List.of();
+        }
+
+        var decompressionPatterns = new ObjectArrayList<IPatternDetails>();
+        var availablePatterns = patterns.get();
+
+        for (var i = 0; i < variants.subList(0, cutoff).size(); i++) {
+            decompressionPatterns.add(availablePatterns.get(i).right());
+        }
+
+        for (var i = cutoff; i < variants.size() - 1; i++) {
+            decompressionPatterns.add(availablePatterns.get(i).left());
+        }
+
+        return Collections.unmodifiableList(decompressionPatterns);
+    }
+
+    private List<Pair<IPatternDetails, IPatternDetails>> gatherPatterns() {
+        var patterns = new ObjectArrayList<Pair<IPatternDetails, IPatternDetails>>();
+
+        for (var i = 0; i < variants.size() - 1; i++) {
+            var smaller = variants.get(i);
+            var larger = variants.get(i + 1);
+
+            var compression = new DecompressionPattern(smaller.item, larger.item, larger.factor, true);
+            var decompression = new DecompressionPattern(larger.item, smaller.item, larger.factor, false);
+
+            patterns.add(Pair.of(compression, decompression));
+        }
+
+        return patterns;
+    }
+
+    public Map<Item, Long> initStacks(BigInteger unitCount, int cutoff, Item fallback) {
+        var stacks = new Object2LongLinkedOpenHashMap<Item>();
+
+        if (isEmpty()) {
+            if (fallback != null) {
+                stacks.put(fallback, clamp(unitCount, STACK_LIMIT));
+            }
+
+            return stacks;
+        }
+
+        var swapped = lastMultiplierSwapped(cutoff);
+
+        for (var variant : swapped) {
+            if (variant != swapped.getLast()) {
+                var factor = variant.big();
+                stacks.put(variant.item(), unitCount.remainder(factor).longValue());
+                unitCount = unitCount.divide(factor);
+            } else {
+                stacks.put(variant.item(), clamp(unitCount, STACK_LIMIT));
+                break;
+            }
+        }
+
+        return stacks;
+    }
+
+    public void updateStacks(Map<Item, Long> stackMap, BigInteger unitsToAdd, int cutoff) {
+        if (isEmpty()) {
+            if (stackMap.size() > 1) {
+                throw new IllegalStateException("Bulk cell reported more than one stack for empty compression chain");
+            }
+
+            if (!stackMap.isEmpty()) {
+                var item = stackMap.keySet().iterator().next();
+                var amount = BigInteger.valueOf(stackMap.get(item));
+                stackMap.put(item, clamp(amount.add(unitsToAdd), STACK_LIMIT));
+            }
+
+            return;
+        }
+
+        var swapped = lastMultiplierSwapped(cutoff);
+
+        for (var variant : lastMultiplierSwapped(cutoff)) {
+            var factor = variant.big();
+            var amount = BigInteger.valueOf(stackMap.get(variant.item));
+
+            if (unitsToAdd.signum() != 0 && variant.item != swapped.getLast().item) {
+                var added = unitsToAdd.remainder(factor);
+                amount = amount.add(added);
+                unitsToAdd = unitsToAdd.subtract(added);
+
+                if (amount.signum() == -1 || amount.divide(factor).signum() == 1) {
+                    var outflow = amount.add(factor).remainder(factor);
+                    unitsToAdd = unitsToAdd.add(amount.subtract(outflow));
+                    amount = outflow;
+                }
+
+                stackMap.put(variant.item, amount.longValue());
+                unitsToAdd = unitsToAdd.divide(factor);
+            } else {
+                stackMap.put(variant.item, clamp(amount.add(unitsToAdd), STACK_LIMIT));
+                break;
+            }
+        }
+    }
+
+    private List<Variant> lastMultiplierSwapped(int cutoff) {
+        var subChain = variants.subList(0, cutoff + 1);
+
+        if (subChain.isEmpty()) {
+            return subChain;
+        }
+
+        var swapped = new ArrayList<Variant>();
+
+        for (var i = 1; i < subChain.size(); i++) {
+            swapped.add(new Variant(subChain.get(i - 1).item, subChain.get(i).factor));
+        }
+
+        swapped.add(new Variant(subChain.getLast().item, subChain.getFirst().factor));
+        return swapped;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        return o != null && o.getClass() == getClass() && ((CompressionChain) o).variants.equals(variants);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(variants);
+    }
+
+    record Variant(Item item, int factor) {
+        private static final StreamCodec<RegistryFriendlyByteBuf, Variant> STREAM_CODEC = StreamCodec.composite(
+                ByteBufCodecs.registry(Registries.ITEM),
+                Variant::item,
+                ByteBufCodecs.VAR_INT,
+                Variant::factor,
+                Variant::new);
+
+        private BigInteger big() {
+            return BigInteger.valueOf(factor);
+        }
+
+        @NotNull
         @Override
         public String toString() {
             return factor + "x → " + item;
